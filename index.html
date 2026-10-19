@@ -914,8 +914,8 @@ function buildBrief(mode) {
   return `${m.prompt(v1, v2)}\n\n${profile()}\n\n${STYLE}`;
 }
 function coachStart(mode) {
-  C = { mode, turns: [{ role: 'user', content: buildBrief(mode) }], busy: false, ctl: null, err: '', retry: false, live: '' };
-  if (sampleState === 'none') { renderCoach(); return; }
+  C = { mode, via: provider(), turns: [{ role: 'user', content: buildBrief(mode) }], busy: false, ctl: null, err: '', retry: false, live: '' };
+  if (C.via === 'claude' && sampleState === 'none') { renderCoach(); return; }
   coachRun();
 }
 function coachSend(text) { C.turns.push({ role: 'user', content: text }); coachRun(); }
@@ -926,28 +926,95 @@ const ERR = {
   empty_completion: 'Claude sent back an empty answer. Try again or rephrase.',
   prompt_too_large: 'This conversation got too long. Start a new session.',
 };
+// AI provider: Claude (inside claude.ai) or a local Ollama server (local copy of the app)
+let AI = Object.assign({ provider: null, url: 'http://localhost:11434', model: '' }, store.get('ai', {}));
+let OL = { state: 'idle', models: [], err: '' };   // idle | checking | ok | nomodels | error
+const provider = () => AI.provider || (window.claude ? 'claude' : 'ollama');
+const olBase = () => AI.url.trim().replace(/\/+$/, '');
+const stripThink = t => t.replace(/<think>[\s\S]*?(<\/think>|$)/g, '').replace(/^\s+/, '');
+function olNetErr() {
+  return window.claude
+    ? 'Pages on claude.ai can\'t reach programs on your computer. Open your downloaded copy of the app to use Ollama.'
+    : `Couldn't reach Ollama at ${olBase()}. Check that Ollama is running, and open the app from http://localhost (see "How to set up Ollama").`;
+}
+async function ollamaCheck() {
+  OL = { state: 'checking', models: [], err: '' }; renderCoach();
+  try {
+    const r = await fetch(olBase() + '/api/tags');
+    if (!r.ok) throw new Error(`Ollama answered with error ${r.status}.`);
+    const j = await r.json();
+    OL.models = (j.models || []).map(m => m.name);
+    if (!OL.models.includes(AI.model)) AI.model = OL.models.find(n => /qwen/i.test(n)) || OL.models[0] || '';
+    store.set('ai', AI);
+    OL.state = OL.models.length ? 'ok' : 'nomodels';
+  } catch (e) {
+    OL.state = 'error'; OL.err = e instanceof TypeError ? olNetErr() : String(e.message || e);
+  }
+  if (view === 'coach') renderCoach();
+}
+async function ollamaChat(turns, signal, onText) {
+  if (!AI.model) throw { code: 'ollama', message: 'Pick an Ollama model first: press Connect above the coaches.' };
+  let r;
+  try {
+    r = await fetch(olBase() + '/api/chat', { method: 'POST', signal, headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: AI.model, messages: turns, stream: true }) });
+  } catch (e) {
+    if (e.name === 'AbortError') throw { code: 'cancelled' };
+    throw { code: 'ollama', message: olNetErr() };
+  }
+  if (!r.ok) { let m = ''; try { m = (await r.json()).error; } catch {} throw { code: 'ollama', message: `Ollama error: ${m || r.status}` }; }
+  const rd = r.body.getReader(), dec = new TextDecoder();
+  let buf = '', raw = '';
+  try {
+    for (;;) {
+      const { value, done } = await rd.read();
+      if (done) break;
+      buf += dec.decode(value, { stream: true });
+      let i;
+      while ((i = buf.indexOf('\n')) >= 0) {
+        const line = buf.slice(0, i).trim(); buf = buf.slice(i + 1);
+        if (!line) continue;
+        const j = JSON.parse(line);
+        if (j.error) throw { code: 'ollama', message: 'Ollama error: ' + j.error };
+        if (j.message?.content) { raw += j.message.content; const t = stripThink(raw); if (t) onText(t); }
+      }
+    }
+  } catch (e) {
+    if (e.name === 'AbortError') throw { code: 'cancelled', text: stripThink(raw) || undefined };
+    throw e;
+  }
+  const text = stripThink(raw).trim();
+  if (!text) throw { code: 'empty_completion' };
+  return { text, truncated: false };
+}
 async function coachRun() {
   if (C.busy) return;
   C.busy = true; C.err = ''; C.retry = false; C.live = '';
   renderCoach();
   const ctl = C.ctl = new AbortController(), mine = C;
-  try {
-    const s = await sampleP;
-    if (!s) throw { code: 'not_granted' };
-    const { text, truncated } = await s(C.turns, { cache: false, signal: ctl.signal, onText: ({ text }) => {
-      if (C !== mine) return;
-      C.live = text; const el = document.getElementById('live');
-      if (el) { el.classList.remove('thinking'); el.innerHTML = fmtAI(text); }
-    }});
+  const onText = text => {
     if (C !== mine) return;
-    C.turns.push({ role: 'assistant', content: text + (truncated ? '\n\n(Cut short. Ask me to continue.)' : '') });
+    C.live = text; const el = document.getElementById('live');
+    if (el) { el.classList.remove('thinking'); el.innerHTML = fmtAI(text); }
+  };
+  try {
+    let res;
+    if (C.via === 'ollama') res = await ollamaChat(C.turns, ctl.signal, onText);
+    else {
+      const s = await sampleP;
+      if (!s) throw { code: 'not_granted' };
+      res = await s(C.turns, { cache: false, signal: ctl.signal, onText: ({ text }) => onText(text) });
+    }
+    if (C !== mine) return;
+    C.turns.push({ role: 'assistant', content: res.text + (res.truncated ? '\n\n(Cut short. Ask me to continue.)' : '') });
     markActivity();
   } catch (e) {
     if (C !== mine) return;
     const code = e?.code || 'upstream_error';
-    if (['not_granted', 'sampling_disabled', 'not_declared', 'capability_disabled', 'capability_removed'].includes(code)) sampleState = 'none';
+    if (C.via !== 'ollama' && ['not_granted', 'sampling_disabled', 'not_declared', 'capability_disabled', 'capability_removed'].includes(code)) sampleState = 'none';
     else if (code === 'cancelled') { if (e.text) C.turns.push({ role: 'assistant', content: e.text + ' …' }); }
-    else { C.err = ERR[code] || 'The connection to Claude dropped.'; C.retry = true; }
+    else if (code === 'ollama') { C.err = e.message; C.retry = true; }
+    else { C.err = ERR[code] || (C.via === 'ollama' ? 'The connection to Ollama dropped.' : 'The connection to Claude dropped.'); C.retry = true; }
   } finally {
     if (C === mine) { C.busy = false; C.live = ''; C.ctl = null; renderCoach(); }
   }
@@ -960,10 +1027,46 @@ function coachFallbackHtml() {
     <div class="row"><button class="btn primary" data-act="copyprompt">Copy prompt</button><button class="btn" data-act="coachback">Back</button></div>
   </section>`;
 }
+function aiBarHtml() {
+  const p = provider();
+  let body = '';
+  if (p === 'claude') {
+    body = `<p style="color:var(--muted);font-size:.92rem">${sampleState === 'none' ? 'Claude isn\'t reachable from this copy of the app, so each coach gives you a prompt to paste into claude.ai instead. Switch to Ollama to use an AI on your computer.' : 'Sessions use your Claude account. claude.ai asks you to allow it the first time.'}</p>`;
+  } else {
+    const status = { idle: 'Not connected yet.', checking: 'Connecting…', ok: `Connected. ${OL.models.length} model${OL.models.length > 1 ? 's' : ''} found.`, nomodels: 'Connected, but no models are installed. Run: ollama pull qwen3', error: OL.err }[OL.state];
+    body = `<div class="row">
+        <input class="field" id="ol-url" style="flex:1;min-width:180px" value="${esc(AI.url)}" aria-label="Ollama address">
+        <button class="btn" data-act="olconnect">${OL.state === 'ok' ? 'Reconnect' : 'Connect'}</button>
+      </div>
+      ${OL.models.length ? `<div class="row"><label class="eyebrow" for="ol-model">Model</label><select class="field" id="ol-model" style="flex:1;min-width:0">${OL.models.map(m => `<option ${m === AI.model ? 'selected' : ''}>${esc(m)}</option>`).join('')}</select></div>` : ''}
+      <p class="${OL.state === 'error' ? 'err' : ''}" style="font-size:.9rem;${OL.state === 'error' ? '' : 'color:var(--muted)'}">${esc(status)}</p>
+      <details class="brief"><summary>How to set up Ollama</summary><pre>1. Install Ollama from ollama.com and get a model that is good at Chinese:
+     ollama pull qwen3
+2. Get this app from your GitHub repo (Learn-China). In its folder run:
+     python3 -m http.server 8000
+   then open http://localhost:8000 in your browser.
+3. Go to Coach, choose Ollama and press Connect.
+
+Opening index.html by double-clicking usually gets blocked by Ollama. If you want that anyway, start Ollama with OLLAMA_ORIGINS="*" set.
+The claude.ai version of this app can't reach Ollama at all; browsers keep claude.ai pages away from your computer.
+Small models (under ~7B) often ignore parts of the coaching instructions.</pre></details>`;
+  }
+  return `<section class="card" style="padding:18px;gap:12px">
+    <div class="row"><h3>AI tutor</h3><span class="spacer"></span>
+      <div class="seg" role="group" aria-label="AI provider">
+        <button data-act="aiprov" data-p="claude" aria-pressed="${p === 'claude'}">Claude</button>
+        <button data-act="aiprov" data-p="ollama" aria-pressed="${p === 'ollama'}">Ollama (your computer)</button>
+      </div></div>
+    ${body}
+  </section>`;
+}
 function renderCoach() {
   if (!C.mode) {
+    const p = provider();
+    if (p === 'ollama' && OL.state === 'idle') setTimeout(ollamaCheck);
     $main.innerHTML = `<div class="wrap" style="gap:18px">
-      <div><h2>Coach</h2><p style="color:var(--muted);max-width:62ch">Six ways to study with Claude as your tutor. Each one knows which lessons and words you've done. Tap any Chinese in a reply to hear it.${sampleState === 'none' ? ' Claude isn\'t reachable from this copy of the app, so each one gives you a prompt to paste into claude.ai instead.' : ''}</p></div>
+      <div><h2>Coach</h2><p style="color:var(--muted);max-width:62ch">Six ways to study with an AI tutor. Each one knows which lessons and words you've done. Tap any Chinese in a reply to hear it.</p></div>
+      ${aiBarHtml()}
       <div class="modes">${MODES.map(m => {
         const sugg = typeof m.field.sugg === 'function' ? m.field.sugg() : m.field.sugg;
         return `<section class="mode">
@@ -973,15 +1076,17 @@ function renderCoach() {
           <div class="sugg">${sugg.map(s => `<button data-act="coachsugg" data-mode="${m.id}" data-v="${esc(s)}">${esc(s)}</button>`).join('')}</div>
           ${m.extra ? `<label class="eyebrow" for="x-${m.id}">${m.extra.label}</label><input class="field" id="x-${m.id}" placeholder="${esc(m.extra.ph)}">` : ''}
           <span class="spacer"></span>
-          <button class="btn primary" data-act="coachstart" data-mode="${m.id}">${sampleState === 'none' ? 'Get the prompt' : 'Start session'}</button>
+          <button class="btn primary" data-act="coachstart" data-mode="${m.id}">${p === 'claude' && sampleState === 'none' ? 'Get the prompt' : 'Start session'}</button>
         </section>`;
       }).join('')}</div>
     </div>`;
+    document.getElementById('ol-url')?.addEventListener('change', e => { AI.url = e.target.value; store.set('ai', AI); });
+    document.getElementById('ol-model')?.addEventListener('change', e => { AI.model = e.target.value; store.set('ai', AI); });
     return;
   }
   const m = MODES.find(x => x.id === C.mode);
-  const head = `<div class="row"><button class="btn ghost" data-act="coachback">← All coaches</button><span class="spacer"></span><h3>${m.title}</h3></div>`;
-  if (sampleState === 'none') { $main.innerHTML = `<div class="wrap" style="gap:18px">${head}${coachFallbackHtml()}</div>`; return; }
+  const head = `<div class="row"><button class="btn ghost" data-act="coachback">← All coaches</button><span class="spacer"></span><h3>${m.title}</h3><span class="chip">${C.via === 'ollama' ? 'Ollama · ' + esc(AI.model || 'no model') : 'Claude'}</span></div>`;
+  if (C.via === 'claude' && sampleState === 'none') { $main.innerHTML = `<div class="wrap" style="gap:18px">${head}${coachFallbackHtml()}</div>`; return; }
   const draft = document.getElementById('coach-in')?.value || '';
   const msgs = C.turns.slice(1).map(t => `<div class="msg ${t.role === 'user' ? 'me' : 'ai'}">${t.role === 'user' ? esc(t.content) : fmtAI(t.content)}</div>`).join('');
   $main.innerHTML = `<div class="wrap" style="gap:14px">${head}
@@ -1027,6 +1132,8 @@ document.addEventListener('click', e => {
     case 'coachsugg': { const f = document.getElementById('f-' + d.mode); if (f) { f.value = d.v; f.focus(); } break; }
     case 'coachsend': { const ta = document.getElementById('coach-in'); const v = ta.value.trim(); if (v) { ta.value = ''; coachSend(v); } break; }
     case 'coachstop': C.ctl?.abort(); break;
+    case 'aiprov': AI.provider = d.p; store.set('ai', AI); renderCoach(); if (d.p === 'ollama' && OL.state === 'idle') ollamaCheck(); break;
+    case 'olconnect': AI.url = document.getElementById('ol-url').value; store.set('ai', AI); ollamaCheck(); break;
     case 'coachretry': coachRun(); break;
     case 'coachback': C.ctl?.abort(); C.mode = null; C.turns = []; C.err = ''; renderCoach(); break;
     case 'copyprompt': {
