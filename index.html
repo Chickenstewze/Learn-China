@@ -974,7 +974,7 @@ function buildBrief(mode) {
 }
 function coachStart(mode) {
   C = { mode, via: provider(), turns: [{ role: 'user', content: buildBrief(mode) }], busy: false, ctl: null, err: '', retry: false, live: '' };
-  if (C.via === 'claude' && sampleState === 'none') { renderCoach(); return; }
+  if (noLive(C.via)) { renderCoach(); return; }
   coachRun();
 }
 function coachSend(text) { C.turns.push({ role: 'user', content: text }); coachRun(); }
@@ -986,9 +986,12 @@ const ERR = {
   prompt_too_large: 'This conversation got too long. Start a new session.',
 };
 // AI provider: Claude (inside claude.ai) or a local Ollama server (local copy of the app)
-let AI = Object.assign({ provider: null, url: 'http://localhost:11434', model: '' }, store.get('ai', {}));
+let AI = Object.assign({ provider: null, tier: 'quick', url: 'http://localhost:11434', model: '' }, store.get('ai', {}));
 let OL = { state: 'idle', models: [], err: '' };   // idle | checking | ok | nomodels | error
-const provider = () => AI.provider || (window.claude ? 'claude' : 'ollama');
+const provider = () => AI.provider || 'off';
+const noLive = via => via === 'off' || (via === 'claude' && sampleState === 'none');
+const HISTORY = 8;   // only the brief + the last few turns are sent, so long chats don't cost more per message
+const trimTurns = t => t.length <= HISTORY + 1 ? t : [t[0], ...t.slice(-HISTORY)];
 const olBase = () => AI.url.trim().replace(/\/+$/, '');
 const stripThink = t => t.replace(/<think>[\s\S]*?(<\/think>|$)/g, '').replace(/^\s+/, '');
 function olNetErr() {
@@ -1058,11 +1061,11 @@ async function coachRun() {
   };
   try {
     let res;
-    if (C.via === 'ollama') res = await ollamaChat(C.turns, ctl.signal, onText);
+    if (C.via === 'ollama') res = await ollamaChat(trimTurns(C.turns), ctl.signal, onText);
     else {
       const s = await sampleP;
       if (!s) throw { code: 'not_granted' };
-      res = await s(C.turns, { cache: false, model: 'claude-opus-5-5', modelTier: 'complex', signal: ctl.signal, onText: ({ text }) => onText(text) });
+      res = await s(trimTurns(C.turns), { cache: false, ...(AI.tier === 'opus' ? { model: 'claude-opus-5-5', modelTier: 'complex' } : { modelTier: 'quick' }), signal: ctl.signal, onText: ({ text }) => onText(text) });
     }
     if (C !== mine) return;
     C.turns.push({ role: 'assistant', content: res.text + (res.truncated ? '\n\n(Cut short. Ask me to continue.)' : '') });
@@ -1081,7 +1084,7 @@ async function coachRun() {
 function coachFallbackHtml() {
   return `<section class="card intro">
     <h3>Use this with Claude</h3>
-    <p>The coach can't reach Claude from here${window.claude ? ' (Claude access was turned off for this page)' : ' because this copy of the app is running outside claude.ai'}. Copy this prompt and paste it into a chat at claude.ai. It already includes your progress.</p>
+    <p>${C.via === 'off' ? 'The AI tutor is off, so this app uses none of your Claude usage.' : `The coach can't reach Claude from here${window.claude ? ' (Claude access was turned off for this page)' : ' because this copy of the app is running outside claude.ai'}.`} If you want, copy this prompt and paste it into any AI chat yourself. It already includes your progress.</p>
     <pre class="prompt-copy" id="prompt-copy">${esc(C.turns[0].content)}</pre>
     <div class="row"><button class="btn primary" data-act="copyprompt">Copy prompt</button><button class="btn" data-act="coachback">Back</button></div>
   </section>`;
@@ -1089,8 +1092,16 @@ function coachFallbackHtml() {
 function aiBarHtml() {
   const p = provider();
   let body = '';
-  if (p === 'claude') {
-    body = `<p style="color:var(--muted);font-size:.92rem">${sampleState === 'none' ? 'Claude isn\'t reachable from this copy of the app, so each coach gives you a prompt to paste into claude.ai instead. Switch to Ollama to use an AI on your computer.' : 'Sessions use Claude Opus on your Claude account. Opus thinks before it answers, so replies can take a little while. claude.ai asks you to allow it the first time.'}</p>`;
+  if (p === 'off') {
+    body = `<p style="color:var(--muted);font-size:.92rem">Off: nothing in this app uses your Claude usage. Each coach gives you a prompt you can copy into a chat yourself. Lessons, tones, review and words never use AI.</p>`;
+  } else if (p === 'claude') {
+    body = sampleState === 'none'
+      ? `<p style="color:var(--muted);font-size:.92rem">Claude isn't reachable from this copy of the app, so each coach gives you a prompt to copy instead.</p>`
+      : `<div class="seg" role="group" aria-label="Claude model">
+          <button data-act="aitier" data-t="quick" aria-pressed="${AI.tier !== 'opus'}">Fast · light usage</button>
+          <button data-act="aitier" data-t="opus" aria-pressed="${AI.tier === 'opus'}">Opus · best, uses more</button>
+        </div>
+        <p style="color:var(--muted);font-size:.92rem">Claude is only used when you press Start or Send in a coach, and each message counts like a message in a Claude chat. ${AI.tier === 'opus' ? 'Opus gives the best coaching but uses your limits fastest.' : 'Fast uses Claude\'s smallest, quickest model, which uses the least of your limits.'} Only your last few messages are sent each time, so long sessions don't get more expensive.</p>`;
   } else {
     const status = { idle: 'Not connected yet.', checking: 'Connecting…', ok: `Connected. ${OL.models.length} model${OL.models.length > 1 ? 's' : ''} found.`, nomodels: 'Connected, but no models are installed. Run: ollama pull qwen3', error: OL.err }[OL.state];
     body = `<div class="row">
@@ -1113,8 +1124,9 @@ Small models (under ~7B) often ignore parts of the coaching instructions.</pre><
   return `<section class="card" style="padding:18px;gap:12px">
     <div class="row"><h3>AI tutor</h3><span class="spacer"></span>
       <div class="seg" role="group" aria-label="AI provider">
+        <button data-act="aiprov" data-p="off" aria-pressed="${p === 'off'}">Off</button>
         <button data-act="aiprov" data-p="claude" aria-pressed="${p === 'claude'}">Claude</button>
-        <button data-act="aiprov" data-p="ollama" aria-pressed="${p === 'ollama'}">Ollama (your computer)</button>
+        <button data-act="aiprov" data-p="ollama" aria-pressed="${p === 'ollama'}">Ollama</button>
       </div></div>
     ${body}
   </section>`;
@@ -1135,7 +1147,7 @@ function renderCoach() {
           <div class="sugg">${sugg.map(s => `<button data-act="coachsugg" data-mode="${m.id}" data-v="${esc(s)}">${esc(s)}</button>`).join('')}</div>
           ${m.extra ? `<label class="eyebrow" for="x-${m.id}">${m.extra.label}</label><input class="field" id="x-${m.id}" placeholder="${esc(m.extra.ph)}">` : ''}
           <span class="spacer"></span>
-          <button class="btn primary" data-act="coachstart" data-mode="${m.id}">${p === 'claude' && sampleState === 'none' ? 'Get the prompt' : 'Start session'}</button>
+          <button class="btn primary" data-act="coachstart" data-mode="${m.id}">${noLive(p) ? 'Get the prompt' : 'Start session'}</button>
         </section>`;
       }).join('')}</div>
     </div>`;
@@ -1144,8 +1156,8 @@ function renderCoach() {
     return;
   }
   const m = MODES.find(x => x.id === C.mode);
-  const head = `<div class="row"><button class="btn ghost" data-act="coachback">← All coaches</button><span class="spacer"></span><h3>${m.title}</h3><span class="chip">${C.via === 'ollama' ? 'Ollama · ' + esc(AI.model || 'no model') : 'Claude'}</span></div>`;
-  if (C.via === 'claude' && sampleState === 'none') { $main.innerHTML = `<div class="wrap" style="gap:18px">${head}${coachFallbackHtml()}</div>`; return; }
+  const head = `<div class="row"><button class="btn ghost" data-act="coachback">← All coaches</button><span class="spacer"></span><h3>${m.title}</h3><span class="chip">${C.via === 'ollama' ? 'Ollama · ' + esc(AI.model || 'no model') : AI.tier === 'opus' ? 'Claude Opus' : 'Claude Fast'}</span></div>`;
+  if (noLive(C.via)) { $main.innerHTML = `<div class="wrap" style="gap:18px">${head}${coachFallbackHtml()}</div>`; return; }
   const draft = document.getElementById('coach-in')?.value || '';
   const msgs = C.turns.slice(1).map(t => `<div class="msg ${t.role === 'user' ? 'me' : 'ai'}">${t.role === 'user' ? esc(t.content) : fmtAI(t.content)}</div>`).join('');
   $main.innerHTML = `<div class="wrap" style="gap:14px">${head}
@@ -1191,6 +1203,7 @@ document.addEventListener('click', e => {
     case 'coachsugg': { const f = document.getElementById('f-' + d.mode); if (f) { f.value = d.v; f.focus(); } break; }
     case 'coachsend': { const ta = document.getElementById('coach-in'); const v = ta.value.trim(); if (v) { ta.value = ''; coachSend(v); } break; }
     case 'coachstop': C.ctl?.abort(); break;
+    case 'aitier': AI.tier = d.t; store.set('ai', AI); renderCoach(); break;
     case 'aiprov': AI.provider = d.p; store.set('ai', AI); renderCoach(); if (d.p === 'ollama' && OL.state === 'idle') ollamaCheck(); break;
     case 'olconnect': AI.url = document.getElementById('ol-url').value; store.set('ai', AI); ollamaCheck(); break;
     case 'coachretry': coachRun(); break;
