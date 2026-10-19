@@ -222,6 +222,29 @@ nav.tabs button[aria-current="page"] { background: var(--surface); color: var(--
 
 footer.note-voice { font-size: 0.85rem; color: var(--muted); border-top: 1px solid var(--line); padding-top: 14px; }
 
+/* coach */
+.modes { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }
+.mode { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 18px; display: flex; flex-direction: column; gap: 10px; }
+.mode p { color: var(--muted); font-size: 0.92rem; }
+.mode .spacer { flex: 1; }
+.field { width: 100%; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); font: inherit; font-size: 0.95rem; resize: vertical; }
+.sugg { display: flex; flex-wrap: wrap; gap: 6px; }
+.sugg button { border: 1px solid var(--line); background: var(--bg); border-radius: 999px; padding: 3px 10px; font-size: 0.8rem; color: var(--muted); }
+.sugg button:hover { border-color: var(--accent); color: var(--accent); }
+.chat { display: flex; flex-direction: column; gap: 12px; }
+.msg { max-width: 88%; padding: 12px 14px; border-radius: 14px; white-space: pre-wrap; overflow-wrap: anywhere; min-width: 0; }
+.msg.me { align-self: flex-end; background: var(--accent); color: var(--accent-ink); border-bottom-right-radius: 4px; }
+.msg.ai { align-self: flex-start; background: var(--surface); border: 1px solid var(--line); border-bottom-left-radius: 4px; }
+.msg.thinking { color: var(--muted); font-style: italic; }
+.hanbtn { border: 0; background: none; padding: 0; font-family: var(--f-han); font-size: 1.08em; color: inherit; text-decoration: underline dotted var(--accent); text-underline-offset: 4px; }
+.hanbtn:hover { color: var(--accent); }
+details.brief { font-size: 0.85rem; color: var(--muted); }
+details.brief pre { white-space: pre-wrap; font-family: inherit; background: var(--sunk); padding: 10px 12px; border-radius: 10px; margin: 8px 0 0; }
+.composer { display: flex; gap: 8px; align-items: flex-end; }
+.composer textarea { flex: 1; min-width: 0; }
+.err { color: var(--bad); font-size: 0.92rem; }
+pre.prompt-copy { white-space: pre-wrap; font-family: inherit; background: var(--sunk); padding: 14px; border-radius: 10px; margin: 0; font-size: 0.92rem; max-height: 50vh; overflow: auto; }
+
 @media (max-width: 480px) {
   .options { grid-template-columns: 1fr; }
   .options.tones { grid-template-columns: 1fr 1fr; }
@@ -246,6 +269,7 @@ footer.note-voice { font-size: 0.85rem; color: var(--muted); border-top: 1px sol
     <button data-act="tab" data-tab="path">Lessons</button>
     <button data-act="tab" data-tab="tones">Tones</button>
     <button data-act="tab" data-tab="review">Review</button>
+    <button data-act="tab" data-tab="coach">Coach</button>
     <button data-act="tab" data-tab="words">Words</button>
   </nav>
   <main id="main"></main>
@@ -490,6 +514,7 @@ function render() {
   else if (view === 'tones') renderTones();
   else if (view === 'review') renderReview();
   else if (view === 'words') renderWords();
+  else if (view === 'coach') renderCoach();
 }
 
 // ---------- lessons path ----------
@@ -840,6 +865,140 @@ function renderWords() {
   document.getElementById('q').addEventListener('input', e => { query = e.target.value; document.getElementById('wl').innerHTML = wordListHtml(); });
 }
 
+// ---------- coach (Claude tutor sessions) ----------
+let sampleFn = null, sampleState = 'pending';   // pending | ready | none
+const sampleP = (window.claude?.use ? window.claude.use('sample') : Promise.resolve(null))
+  .catch(() => null)
+  .then(s => { sampleFn = s; sampleState = s ? 'ready' : 'none'; if (view === 'coach') renderCoach(); return s; });
+let C = { mode: null, turns: [], busy: false, ctl: null, err: '', retry: false, live: '' };
+const FINISHED = () => UNITS.filter(u => progress[u.id] >= 0.6);
+const LESSON_LIST = UNITS.map((u, i) => `${i + 1}. ${u.title}`).join(', ');
+function profile() {
+  const f = FINISHED(), words = Object.keys(deck).slice(0, 90);
+  return `About me: I'm a complete beginner in Mandarin Chinese, learning with an app called Hanzi Steps (lessons: ${LESSON_LIST}). ` +
+    `Lessons I've finished: ${f.length ? f.map(u => u.title).join(', ') : 'none yet'}. ` +
+    `Words I've studied: ${words.length ? words.join('、') : 'none yet'}.`;
+}
+const STYLE = `How to reply: this is a small chat box on a phone. Keep each reply short (under 120 words) unless you are writing a plan. Plain text with short paragraphs; **bold** is fine; no tables or headings. Whenever you write Chinese, give the characters, then pinyin with tone marks in parentheses, then the English, like 你好 (nǐ hǎo) hello. I may type pinyin without tone marks, characters, or English; accept all of them. Only ask one question at a time.`;
+const MODES = [
+  { id: 'path', title: '7-day path', blurb: 'Tell it your real goal. Get one task a day under 45 minutes, a test for each day, and one thing to skip.',
+    field: { label: 'My goal', ph: 'Order food at a Chinese restaurant', sugg: ['Order food at a restaurant', 'Introduce myself', 'Chat with my grandparents', 'Get around on a trip to China'] },
+    extra: { label: 'By when', ph: 'in 7 days' },
+    prompt: (g, by) => `My real goal is: ${g}. I don't want to learn Mandarin in general, I want to reach that specific result by ${by || 'the end of 7 days'}.\n\nHere is what I already know: see "About me" above.\n\nBuild me a 7-day learning path. Each day gets one task under 45 minutes, a clear test to know whether I got it right, and one thing to skip so I don't waste time. Point to Hanzi Steps lessons where they fit. You may use up to 400 words for the plan.\n\nIf the full path doesn't get me to the goal, rebuild it until it does. End by asking if I'm ready to start day 1.` },
+  { id: 'teacher', title: '4-hour teacher', blurb: 'A teacher with only 4 hours to make you functional. What to learn first, what to ignore, and one exercise that puts you ahead.',
+    field: { label: 'Skill', ph: 'basic spoken Mandarin', sugg: ['basic spoken Mandarin', 'reading characters', 'hearing tones', 'shopping and prices'] },
+    prompt: s => `You are a teacher with only 4 hours with me, and you will never see me again.\n\nYour one job: make me functional in ${s || 'basic spoken Mandarin'} before time runs out. No theory without a practical use, no generic lists.\n\nTell me three things: what to learn first, what to ignore completely, and the single exercise which, done once, puts me ahead of 70% of people who have studied this for months.\n\nThen teach me step one and wait for my reply before going on.` },
+  { id: 'core', title: 'Untangle it', blurb: 'Paste something that confuses you. Get the one core idea first, with an everyday analogy, then 3 questions to check you got it.',
+    field: { label: 'What confuses me', ph: 'Why do you say 没有 but 不是?', area: true, sugg: ['Why 没有 but 不是?', 'How do measure words like 个 work?', 'When does 不 become bú?', 'What does 了 do?'] },
+    prompt: c => `The content below confuses me.\n\nBefore explaining anything, give me the one core idea which makes the rest fall into place once I understand it.\n\nExplain only this idea first, with an everyday analogy and zero technical terms.\n\nThen ask me 3 questions only someone who truly understood it would answer. One at a time, and wait for each answer. Don't move on until I pass all three.\n\n${c}` },
+  { id: 'mistake', title: 'Real-situation drill', blurb: 'No explanations. You get dropped into a realistic scene where you will probably get it wrong, and you have to find your own mistake.',
+    field: { label: 'Practice', ph: 'ordering bubble tea', sugg: ['ordering food', 'asking how much something costs', 'saying my age and phone number', 'introducing my family', 'saying no politely'] },
+    prompt: c => `Don't explain ${c || 'basic Mandarin conversation'} to me.\n\nDrop me straight into a realistic situation where I have to use it and will likely get it wrong. Then wait for my answer.\n\nWhen I make a mistake, don't give me the answer. Ask me one question which forces me to find where my reasoning broke.\n\nOnly give me the answer after two attempts. Then repeat with a new situation until I get it right without hesitating. Keep situations within my level from "About me", stretching just a little.` },
+  { id: 'feynman', title: 'Teach it back', blurb: 'Explain what you learned like you\'re talking to a 10-year-old. It stops you on fuzzy words, skipped steps and wrong simplifications.',
+    field: { label: 'Topic I studied', ph: 'the four tones', sugg: () => (FINISHED().length ? FINISHED() : UNITS.slice(0, 3)).map(u => u.title.toLowerCase()) },
+    prompt: t => `I studied ${t || 'the four tones'} today.\n\nI'm going to explain what I understood as if you were a 10-year-old.\n\nWait for my explanation (reply now with just one short line telling me to go ahead). While I explain, stop me every time I use jargon I cannot define, skip a step in the reasoning, or simplify something so much it becomes wrong.\n\nAt the end, tell me exactly what those mistakes reveal about what is still shaky in my understanding.` },
+  { id: 'gaps', title: 'Prove me wrong', blurb: 'Claim you\'ve mastered something. Get 5 simple-looking questions that expose shallow knowledge, with blunt feedback after each.',
+    field: { label: 'I think I\'ve mastered', ph: 'numbers 1 to 99', sugg: () => ['numbers 1 to 99', 'the four tones', 'greetings', ...FINISHED().map(u => u.title.toLowerCase())].filter((v, i, a) => a.indexOf(v) === i).slice(0, 5) },
+    prompt: s => `I think I've already mastered ${s || 'the basics from my finished lessons'}. Prove me wrong.\n\nAsk me 5 questions which look simple but expose the gaps of someone who never went deep. One at a time, and wait for each answer.\n\nAfter every answer, tell me what it reveals about what is still missing in my foundations.\n\nDon't go easy on me. If my answer is shallow, say so directly.` },
+];
+const esc = s => s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+function fmtAI(t) {
+  return esc(t)
+    .replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')
+    .replace(/(\p{Script=Han}[\p{Script=Han}，。？！、]*)/gu, m => hasTTS ? `<button class="hanbtn" data-act="say" data-text="${m}" title="Play">${m}</button>` : `<span class="han">${m}</span>`);
+}
+function buildBrief(mode) {
+  const m = MODES.find(x => x.id === mode);
+  const v1 = (document.getElementById('f-' + mode)?.value || '').trim();
+  const v2 = (document.getElementById('x-' + mode)?.value || '').trim();
+  return `${m.prompt(v1, v2)}\n\n${profile()}\n\n${STYLE}`;
+}
+function coachStart(mode) {
+  C = { mode, turns: [{ role: 'user', content: buildBrief(mode) }], busy: false, ctl: null, err: '', retry: false, live: '' };
+  if (sampleState === 'none') { renderCoach(); return; }
+  coachRun();
+}
+function coachSend(text) { C.turns.push({ role: 'user', content: text }); coachRun(); }
+const ERR = {
+  rate_limited: 'Claude is busy or you hit your usage limit. Wait a bit, then try again.',
+  session_expired: 'Your Claude session expired. Sign in again, then try again.',
+  refused: 'Claude declined that message. Try wording it differently.',
+  empty_completion: 'Claude sent back an empty answer. Try again or rephrase.',
+  prompt_too_large: 'This conversation got too long. Start a new session.',
+};
+async function coachRun() {
+  if (C.busy) return;
+  C.busy = true; C.err = ''; C.retry = false; C.live = '';
+  renderCoach();
+  const ctl = C.ctl = new AbortController(), mine = C;
+  try {
+    const s = await sampleP;
+    if (!s) throw { code: 'not_granted' };
+    const { text, truncated } = await s(C.turns, { cache: false, signal: ctl.signal, onText: ({ text }) => {
+      if (C !== mine) return;
+      C.live = text; const el = document.getElementById('live');
+      if (el) { el.classList.remove('thinking'); el.innerHTML = fmtAI(text); }
+    }});
+    if (C !== mine) return;
+    C.turns.push({ role: 'assistant', content: text + (truncated ? '\n\n(Cut short. Ask me to continue.)' : '') });
+    markActivity();
+  } catch (e) {
+    if (C !== mine) return;
+    const code = e?.code || 'upstream_error';
+    if (['not_granted', 'sampling_disabled', 'not_declared', 'capability_disabled', 'capability_removed'].includes(code)) sampleState = 'none';
+    else if (code === 'cancelled') { if (e.text) C.turns.push({ role: 'assistant', content: e.text + ' …' }); }
+    else { C.err = ERR[code] || 'The connection to Claude dropped.'; C.retry = true; }
+  } finally {
+    if (C === mine) { C.busy = false; C.live = ''; C.ctl = null; renderCoach(); }
+  }
+}
+function coachFallbackHtml() {
+  return `<section class="card intro">
+    <h3>Use this with Claude</h3>
+    <p>The coach can't reach Claude from here${window.claude ? ' (Claude access was turned off for this page)' : ' because this copy of the app is running outside claude.ai'}. Copy this prompt and paste it into a chat at claude.ai. It already includes your progress.</p>
+    <pre class="prompt-copy" id="prompt-copy">${esc(C.turns[0].content)}</pre>
+    <div class="row"><button class="btn primary" data-act="copyprompt">Copy prompt</button><button class="btn" data-act="coachback">Back</button></div>
+  </section>`;
+}
+function renderCoach() {
+  if (!C.mode) {
+    $main.innerHTML = `<div class="wrap" style="gap:18px">
+      <div><h2>Coach</h2><p style="color:var(--muted);max-width:62ch">Six ways to study with Claude as your tutor. Each one knows which lessons and words you've done. Tap any Chinese in a reply to hear it.${sampleState === 'none' ? ' Claude isn\'t reachable from this copy of the app, so each one gives you a prompt to paste into claude.ai instead.' : ''}</p></div>
+      <div class="modes">${MODES.map(m => {
+        const sugg = typeof m.field.sugg === 'function' ? m.field.sugg() : m.field.sugg;
+        return `<section class="mode">
+          <h3>${m.title}</h3><p>${m.blurb}</p>
+          <label class="eyebrow" for="f-${m.id}">${m.field.label}</label>
+          ${m.field.area ? `<textarea class="field" id="f-${m.id}" rows="3" placeholder="${esc(m.field.ph)}"></textarea>` : `<input class="field" id="f-${m.id}" placeholder="${esc(m.field.ph)}">`}
+          <div class="sugg">${sugg.map(s => `<button data-act="coachsugg" data-mode="${m.id}" data-v="${esc(s)}">${esc(s)}</button>`).join('')}</div>
+          ${m.extra ? `<label class="eyebrow" for="x-${m.id}">${m.extra.label}</label><input class="field" id="x-${m.id}" placeholder="${esc(m.extra.ph)}">` : ''}
+          <span class="spacer"></span>
+          <button class="btn primary" data-act="coachstart" data-mode="${m.id}">${sampleState === 'none' ? 'Get the prompt' : 'Start session'}</button>
+        </section>`;
+      }).join('')}</div>
+    </div>`;
+    return;
+  }
+  const m = MODES.find(x => x.id === C.mode);
+  const head = `<div class="row"><button class="btn ghost" data-act="coachback">← All coaches</button><span class="spacer"></span><h3>${m.title}</h3></div>`;
+  if (sampleState === 'none') { $main.innerHTML = `<div class="wrap" style="gap:18px">${head}${coachFallbackHtml()}</div>`; return; }
+  const draft = document.getElementById('coach-in')?.value || '';
+  const msgs = C.turns.slice(1).map(t => `<div class="msg ${t.role === 'user' ? 'me' : 'ai'}">${t.role === 'user' ? esc(t.content) : fmtAI(t.content)}</div>`).join('');
+  $main.innerHTML = `<div class="wrap" style="gap:14px">${head}
+    <details class="brief"><summary>What the coach was told</summary><pre>${esc(C.turns[0].content)}</pre></details>
+    <div class="chat">${msgs}${C.busy ? `<div class="msg ai ${C.live ? '' : 'thinking'}" id="live">${C.live ? fmtAI(C.live) : 'Thinking…'}</div>` : ''}</div>
+    ${C.err ? `<div class="row"><span class="err">${C.err}</span>${C.retry ? '<button class="btn" data-act="coachretry">Try again</button>' : ''}</div>` : ''}
+    <div class="composer">
+      <textarea class="field" id="coach-in" rows="2" placeholder="Type your answer (pinyin, 汉字 or English)" aria-label="Your message"></textarea>
+      ${C.busy ? '<button class="btn" data-act="coachstop">Stop</button>' : '<button class="btn primary" data-act="coachsend">Send</button>'}
+    </div>
+  </div>`;
+  const ta = document.getElementById('coach-in');
+  ta.value = draft;
+  ta.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); document.querySelector('[data-act="coachsend"]')?.click(); } });
+  if (!C.busy) { ta.focus({ preventScroll: true }); document.querySelector('.chat .msg:last-child')?.scrollIntoView({ block: 'nearest' }); }
+}
+
 // ---------- events ----------
 document.addEventListener('click', e => {
   const b = e.target.closest('[data-act]'); if (!b) return;
@@ -864,6 +1023,19 @@ document.addEventListener('click', e => {
     case 'dir': R.dir = d.dir; R.shown = false; renderReview(); break;
     case 'practiceall': R.all = true; nextReviewCard(); renderReview(); break;
     case 'stopall': R.all = false; R.card = null; renderReview(); break;
+    case 'coachstart': coachStart(d.mode); break;
+    case 'coachsugg': { const f = document.getElementById('f-' + d.mode); if (f) { f.value = d.v; f.focus(); } break; }
+    case 'coachsend': { const ta = document.getElementById('coach-in'); const v = ta.value.trim(); if (v) { ta.value = ''; coachSend(v); } break; }
+    case 'coachstop': C.ctl?.abort(); break;
+    case 'coachretry': coachRun(); break;
+    case 'coachback': C.ctl?.abort(); C.mode = null; C.turns = []; C.err = ''; renderCoach(); break;
+    case 'copyprompt': {
+      const pre = document.getElementById('prompt-copy');
+      const done = () => { b.textContent = 'Copied'; };
+      const sel = () => { const r = document.createRange(); r.selectNodeContents(pre); const s = getSelection(); s.removeAllRanges(); s.addRange(r); b.textContent = 'Selected, press copy'; };
+      try { navigator.clipboard.writeText(pre.textContent).then(done, sel); } catch { sel(); }
+      break;
+    }
   }
 });
 document.addEventListener('keydown', e => {
@@ -890,7 +1062,7 @@ document.addEventListener('keydown', e => {
 if (hasTTS) { loadVoices(); speechSynthesis.addEventListener?.('voiceschanged', loadVoices); }
 renderVoiceNote();
 const h0 = (location.hash || '').slice(1);
-if (['path', 'tones', 'review', 'words'].includes(h0)) view = h0;
+if (['path', 'tones', 'review', 'coach', 'words'].includes(h0)) view = h0;
 render();
 </script>
 </body></html>
