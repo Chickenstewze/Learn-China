@@ -1,0 +1,896 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style></head><body>
+<title>Hanzi Steps</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Lexend:wght@300;400;500;600&family=Noto+Serif+SC:wght@500;700&display=swap">
+<style>
+/* Layout: one reading column like a practice notebook; units run down a numbered path, tone colours run through every word. */
+:root {
+  --bg: #F1F4F1;
+  --surface: #FFFFFF;
+  --sunk: #E6ECE8;
+  --ink: #17201C;
+  --muted: #5A6A63;
+  --line: #D5DED9;
+  --accent: #1E6A57;
+  --accent-ink: #FFFFFF;
+  --seal: #B8322A;
+  --good: #2C7A4B;
+  --good-bg: #E1F2E7;
+  --bad: #B83A30;
+  --bad-bg: #F8E3E0;
+  --t1: #C8362B; --t2: #BF730C; --t3: #2E7D47; --t4: #2C5FAD; --t5: #7A847F;
+  --f-display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --f-body: "Lexend", "Segoe UI", system-ui, sans-serif;
+  --f-han: "Noto Serif SC", "Songti SC", "SimSun", "PingFang SC", "Microsoft YaHei", serif;
+  --r: 14px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #111613; --surface: #1A211E; --sunk: #232C28; --ink: #E6EDE9; --muted: #98A79F; --line: #2D3833;
+    --accent: #5FC2A5; --accent-ink: #0D1A15; --seal: #D9534A;
+    --good: #6FCF97; --good-bg: #1B3326; --bad: #F08A80; --bad-bg: #3A1F1C;
+    --t1: #F2796D; --t2: #F0B455; --t3: #6CC488; --t4: #82AAEE; --t5: #9AA6A0;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #111613; --surface: #1A211E; --sunk: #232C28; --ink: #E6EDE9; --muted: #98A79F; --line: #2D3833;
+  --accent: #5FC2A5; --accent-ink: #0D1A15; --seal: #D9534A;
+  --good: #6FCF97; --good-bg: #1B3326; --bad: #F08A80; --bad-bg: #3A1F1C;
+  --t1: #F2796D; --t2: #F0B455; --t3: #6CC488; --t4: #82AAEE; --t5: #9AA6A0;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--ink);
+  font-family: var(--f-body); font-size: 16px; line-height: 1.55; font-weight: 400;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 20px 48px;
+}
+.wrap { max-width: 720px; margin: 0 auto; display: flex; flex-direction: column; gap: 24px; }
+h1, h2, h3 { font-family: var(--f-display); text-wrap: balance; margin: 0; line-height: 1.15; }
+h2 { font-size: 1.6rem; font-weight: 700; }
+h3 { font-size: 1.15rem; font-weight: 700; }
+p { margin: 0; }
+button { font: inherit; color: inherit; cursor: pointer; }
+button:focus-visible, input:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.han { font-family: var(--f-han); font-weight: 500; }
+.t1 { color: var(--t1); } .t2 { color: var(--t2); } .t3 { color: var(--t3); } .t4 { color: var(--t4); } .t5 { color: var(--t5); }
+
+/* header */
+header.top { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.brand { display: flex; align-items: center; gap: 12px; }
+.seal {
+  width: 44px; height: 44px; border-radius: 8px; background: var(--seal); color: #FFF;
+  display: grid; place-items: center; font-family: var(--f-han); font-weight: 700; font-size: 26px;
+  transform: rotate(-4deg);
+}
+.brand h1 { font-size: 1.45rem; font-weight: 700; letter-spacing: -0.01em; }
+.brand small { display: block; color: var(--muted); font-size: 0.8rem; }
+.stats { display: flex; gap: 8px; flex-wrap: wrap; }
+.chip {
+  display: inline-flex; align-items: baseline; gap: 6px; padding: 6px 12px; border-radius: 999px;
+  background: var(--surface); border: 1px solid var(--line); font-size: 0.85rem; color: var(--muted);
+}
+.chip b { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
+
+nav.tabs { display: flex; gap: 4px; padding: 4px; background: var(--sunk); border-radius: 12px; }
+nav.tabs button {
+  flex: 1; border: 0; background: transparent; padding: 10px 8px; border-radius: 9px;
+  font-weight: 500; color: var(--muted); font-size: 0.95rem;
+}
+nav.tabs button[aria-current="page"] { background: var(--surface); color: var(--ink); box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+
+/* buttons */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  border: 1px solid var(--line); background: var(--surface); padding: 10px 18px; border-radius: 10px; font-weight: 500;
+}
+.btn:hover { border-color: var(--muted); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.btn.primary:hover { filter: brightness(1.07); }
+.btn.big { padding: 14px 24px; font-size: 1.05rem; }
+.btn.ghost { background: transparent; border-color: transparent; color: var(--muted); }
+.btn:disabled { opacity: .45; cursor: default; }
+.speak {
+  width: 44px; height: 44px; border-radius: 50%; border: 1px solid var(--line); background: var(--surface);
+  display: inline-grid; place-items: center; flex: none;
+}
+.speak:hover { border-color: var(--accent); color: var(--accent); }
+.speak svg { width: 20px; height: 20px; }
+.speak.lg { width: 64px; height: 64px; }
+.speak.lg svg { width: 28px; height: 28px; }
+.row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.spacer { flex: 1; }
+
+/* path */
+.hero-next {
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--r);
+  padding: 22px; display: flex; gap: 20px; align-items: center; flex-wrap: wrap;
+}
+.hero-next .bigzh { font-family: var(--f-han); font-size: 3.2rem; line-height: 1; font-weight: 700; color: var(--accent); }
+.hero-next .txt { flex: 1; min-width: 200px; display: flex; flex-direction: column; gap: 4px; }
+.eyebrow { font-size: 0.75rem; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-weight: 500; }
+.path { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; position: relative; }
+.path::before { content: ""; position: absolute; left: 21px; top: 22px; bottom: 22px; width: 2px; background: var(--line); }
+.unit {
+  display: grid; grid-template-columns: 44px 1fr auto; gap: 16px; align-items: center;
+  padding: 12px 0; position: relative;
+}
+.unit .num {
+  width: 44px; height: 44px; border-radius: 50%; background: var(--bg); border: 2px solid var(--line);
+  display: grid; place-items: center; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--muted); z-index: 1;
+}
+.unit.done .num { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.unit.next .num { border-color: var(--accent); color: var(--accent); }
+.unit .info { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.unit .info .t { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.unit .info .zh { font-family: var(--f-han); font-size: 1.25rem; font-weight: 700; }
+.unit .info .en { font-weight: 500; }
+.unit .info .meta { color: var(--muted); font-size: 0.85rem; }
+.stars { color: var(--t2); letter-spacing: 2px; font-size: 0.9rem; }
+.stars .off { color: var(--line); }
+
+/* lesson */
+.lessonbar { display: flex; align-items: center; gap: 12px; }
+.progress { flex: 1; height: 10px; background: var(--sunk); border-radius: 99px; overflow: hidden; }
+.progress > i { display: block; height: 100%; background: var(--accent); border-radius: 99px; transition: width .3s ease; }
+.card {
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--r);
+  padding: 28px 24px; display: flex; flex-direction: column; gap: 18px;
+}
+.word { display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center; padding-block: 8px; }
+.word .hz { font-family: var(--f-han); font-weight: 500; font-size: clamp(3.2rem, 14vw, 5.5rem); line-height: 1.1; word-break: keep-all; }
+.word .hz.sentence { font-size: clamp(2rem, 8vw, 3rem); }
+.word .py { font-size: 1.5rem; font-weight: 500; letter-spacing: .01em; }
+.word .en { font-size: 1.15rem; color: var(--muted); }
+.note { background: var(--sunk); border-radius: 10px; padding: 12px 14px; font-size: 0.93rem; color: var(--ink); }
+.note .han { font-size: 1.05em; }
+.intro { display: flex; flex-direction: column; gap: 14px; max-width: 62ch; }
+.intro p { color: var(--ink); }
+
+.prompt { display: flex; flex-direction: column; align-items: center; gap: 12px; text-align: center; }
+.prompt .ask { color: var(--muted); font-size: 0.95rem; }
+.prompt .q-en { font-family: var(--f-display); font-size: 1.9rem; font-weight: 700; }
+.options { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.opt {
+  border: 2px solid var(--line); background: var(--surface); border-radius: 12px; padding: 14px 12px;
+  display: flex; flex-direction: column; align-items: center; gap: 2px; text-align: center; min-height: 64px; justify-content: center;
+}
+.opt:hover:not(:disabled) { border-color: var(--accent); }
+.opt .k { font-size: 0.7rem; color: var(--muted); align-self: flex-start; margin-bottom: -10px; }
+.opt .oh { font-family: var(--f-han); font-size: 1.7rem; line-height: 1.2; }
+.opt .op { font-size: 0.85rem; color: var(--muted); }
+.opt.right { border-color: var(--good); background: var(--good-bg); }
+.opt.wrong { border-color: var(--bad); background: var(--bad-bg); }
+.opt:disabled { cursor: default; }
+.opt svg { width: 56px; height: 34px; }
+.feedback { border-radius: 12px; padding: 14px 16px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.feedback.ok { background: var(--good-bg); color: var(--good); }
+.feedback.no { background: var(--bad-bg); color: var(--bad); }
+.feedback .msg { flex: 1; min-width: 180px; }
+.feedback .msg b { display: block; }
+.feedback .msg span { color: var(--ink); }
+
+/* tone chart */
+.chart { width: 100%; max-width: 520px; }
+.chart text { fill: var(--muted); font-family: var(--f-body); font-size: 9px; }
+.chart .grid { stroke: var(--line); stroke-width: 1; }
+.tonegrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.tonecell {
+  border: 1px solid var(--line); background: var(--surface); border-radius: 12px; padding: 12px 6px;
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+}
+.tonecell:hover { border-color: var(--accent); }
+.tonecell .oh { font-family: var(--f-han); font-size: 1.6rem; }
+.tonecell .op { font-weight: 600; }
+.tonecell small { color: var(--muted); font-size: 0.75rem; text-align: center; }
+
+.score { display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center; }
+.score .pct { font-family: var(--f-display); font-size: 3.5rem; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1; }
+.score .stars { font-size: 2rem; letter-spacing: 6px; }
+
+/* review */
+.flash { cursor: pointer; min-height: 260px; justify-content: center; }
+.seg { display: inline-flex; background: var(--sunk); padding: 3px; border-radius: 10px; gap: 2px; }
+.seg button { border: 0; background: transparent; padding: 6px 12px; border-radius: 8px; font-size: 0.85rem; color: var(--muted); }
+.seg button[aria-pressed="true"] { background: var(--surface); color: var(--ink); }
+.boxes { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+.box { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 8px; text-align: center; }
+.box b { display: block; font-size: 1.2rem; font-variant-numeric: tabular-nums; }
+.box small { color: var(--muted); font-size: 0.72rem; }
+
+/* words */
+.search {
+  width: 100%; padding: 12px 14px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface);
+  color: var(--ink); font: inherit;
+}
+.wordlist { display: flex; flex-direction: column; gap: 22px; }
+.group h3 { display: flex; gap: 10px; align-items: baseline; margin-bottom: 6px; }
+.group h3 .han { font-size: 1rem; color: var(--muted); }
+.wl { list-style: none; margin: 0; padding: 0; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); }
+.wl li { display: grid; grid-template-columns: minmax(84px, auto) 1fr 44px; gap: 14px; align-items: center; padding: 10px 14px; border-top: 1px solid var(--line); }
+.wl li:first-child { border-top: 0; }
+.wl .h { font-family: var(--f-han); font-size: 1.45rem; }
+.wl .m { min-width: 0; display: flex; flex-direction: column; }
+.wl .m span:last-child { color: var(--muted); font-size: 0.9rem; }
+.empty { text-align: center; color: var(--muted); padding: 32px 12px; display: flex; flex-direction: column; gap: 14px; align-items: center; }
+
+footer.note-voice { font-size: 0.85rem; color: var(--muted); border-top: 1px solid var(--line); padding-top: 14px; }
+
+@media (max-width: 480px) {
+  .options { grid-template-columns: 1fr; }
+  .options.tones { grid-template-columns: 1fr 1fr; }
+  .card { padding: 22px 16px; }
+  .tonegrid { grid-template-columns: 1fr 1fr; }
+  nav.tabs button { font-size: 0.88rem; padding: 9px 4px; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+@keyframes pop { from { transform: scale(.96); opacity: .6; } to { transform: none; opacity: 1; } }
+.pop { animation: pop .18s ease-out; }
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div class="brand">
+      <div class="seal" aria-hidden="true">学</div>
+      <div><h1>Hanzi Steps</h1><small>Mandarin from zero</small></div>
+    </div>
+    <div class="stats" id="stats"></div>
+  </header>
+  <nav class="tabs" id="tabs" aria-label="Sections">
+    <button data-act="tab" data-tab="path">Lessons</button>
+    <button data-act="tab" data-tab="tones">Tones</button>
+    <button data-act="tab" data-tab="review">Review</button>
+    <button data-act="tab" data-tab="words">Words</button>
+  </nav>
+  <main id="main"></main>
+  <footer class="note-voice" id="voice-note"></footer>
+</div>
+
+<script>
+// ---------- data ----------
+const W = (h, p, e, n) => ({ h, p, e, n });
+const UNITS = [
+  { id: 'tones', zh: '声调', title: 'The four tones', intro: 'tones', words: [
+    W('妈', 'mā', 'mom', 'Tone 1: high and level, like singing one steady note.'),
+    W('麻', 'má', 'numb', 'Tone 2: rises, like asking "huh?"'),
+    W('马', 'mǎ', 'horse', 'Tone 3: dips low, then comes back up a little.'),
+    W('骂', 'mà', 'to scold', 'Tone 4: falls sharply, like a firm "No!"'),
+    W('吗', 'ma', 'yes/no question word', 'Neutral tone: short and light. No mark over the vowel.'),
+  ]},
+  { id: 'greet', zh: '问候', title: 'Greetings', intro: 'Pinyin is the Latin spelling of Chinese sounds, and the mark over the vowel tells you the tone. Here is your first rule: when two 3rd tones meet, the first one is said as a 2nd tone. So <span class="han">你好</span> nǐ hǎo comes out as "ní hǎo".', words: [
+    W('你好', 'nǐ hǎo', 'hello', 'Literally "you good". Said "ní hǎo" because of the 3rd-tone rule.'),
+    W('谢谢', 'xiè xie', 'thank you', 'x sounds like a soft "sh" with your tongue behind your bottom teeth.'),
+    W('不客气', 'bú kè qi', "you're welcome", 'Literally "don\'t be polite".'),
+    W('再见', 'zài jiàn', 'goodbye', 'Literally "again see".'),
+    W('对不起', 'duì bu qǐ', 'sorry'),
+    W('没关系', 'méi guān xi', "it's okay / no problem", 'The usual reply to 对不起.'),
+    W('请', 'qǐng', 'please', 'q sounds like "ch" in "cheese".'),
+    W('早上好', 'zǎo shang hǎo', 'good morning'),
+    W('晚安', 'wǎn ān', 'good night'),
+  ]},
+  { id: 'num', zh: '数字', title: 'Numbers', intro: 'Chinese numbers build like blocks. <span class="han">十一</span> is "ten one" = 11. <span class="han">二十</span> is "two ten" = 20. <span class="han">九十九</span> is "nine ten nine" = 99. Learn 1 to 10 and you can count to 99.', words: [
+    W('一', 'yī', 'one (1)', 'One stroke for one.'),
+    W('二', 'èr', 'two (2)', 'Two strokes for two.'),
+    W('三', 'sān', 'three (3)', 'Three strokes for three.'),
+    W('四', 'sì', 'four (4)', 'Sounds close to 死 sǐ (death), so 4 is an unlucky number.'),
+    W('五', 'wǔ', 'five (5)'),
+    W('六', 'liù', 'six (6)'),
+    W('七', 'qī', 'seven (7)'),
+    W('八', 'bā', 'eight (8)', 'Sounds like 发 fā (to get rich), so 8 is the lucky number.'),
+    W('九', 'jiǔ', 'nine (9)'),
+    W('十', 'shí', 'ten (10)'),
+    W('二十', 'èr shí', 'twenty (20)', '"Two tens".'),
+    W('零', 'líng', 'zero (0)'),
+  ]},
+  { id: 'people', zh: '人', title: 'People', intro: 'Chinese verbs never change form: I am, you are and she is all use the same word. To make a pronoun plural, add <span class="han">们</span> men: <span class="han">我</span> (I) becomes <span class="han">我们</span> (we).', words: [
+    W('我', 'wǒ', 'I / me'),
+    W('你', 'nǐ', 'you'),
+    W('他', 'tā', 'he / him', 'Same sound as 她 (she). Only the writing is different.'),
+    W('她', 'tā', 'she / her', 'The left part 女 means woman.'),
+    W('我们', 'wǒ men', 'we / us'),
+    W('人', 'rén', 'person', 'Looks like a person walking: two legs.'),
+    W('朋友', 'péng you', 'friend'),
+    W('老师', 'lǎo shī', 'teacher'),
+    W('学生', 'xué sheng', 'student', '学 means study. It is the character on this app\'s seal.'),
+  ]},
+  { id: 'family', zh: '家人', title: 'Family', intro: 'Chinese has separate words for older and younger brothers and sisters. Family words often repeat a syllable, and the second one is light (neutral tone).', words: [
+    W('爸爸', 'bà ba', 'dad'),
+    W('妈妈', 'mā ma', 'mom'),
+    W('哥哥', 'gē ge', 'older brother'),
+    W('姐姐', 'jiě jie', 'older sister'),
+    W('弟弟', 'dì di', 'younger brother'),
+    W('妹妹', 'mèi mei', 'younger sister'),
+    W('家', 'jiā', 'home / family', 'The top is a roof. Under it is an old character for pig: a home with livestock.'),
+  ]},
+  { id: 'food', zh: '吃喝', title: 'Food and drink', intro: 'Word order is subject, verb, object, like English. <span class="han">我喝茶</span> = I drink tea. <span class="han">我吃米饭</span> = I eat rice.', words: [
+    W('吃', 'chī', 'to eat', 'The left part 口 means mouth.'),
+    W('喝', 'hē', 'to drink', 'Also has 口 (mouth) on the left.'),
+    W('水', 'shuǐ', 'water'),
+    W('茶', 'chá', 'tea', 'The top part means grass or plant.'),
+    W('咖啡', 'kā fēi', 'coffee', 'Borrowed from the sound of "coffee".'),
+    W('米饭', 'mǐ fàn', 'cooked rice'),
+    W('面条', 'miàn tiáo', 'noodles'),
+    W('好吃', 'hǎo chī', 'tasty', 'Literally "good to eat".'),
+    W('饿', 'è', 'hungry'),
+  ]},
+  { id: 'verbs', zh: '动词', title: 'Core verbs', intro: 'Put <span class="han">不</span> bù before a verb to say "not": <span class="han">我不喝</span> = I don\'t drink. Before a 4th tone it becomes bú: <span class="han">不是</span> bú shì.', words: [
+    W('是', 'shì', 'to be (am / is / are)'),
+    W('有', 'yǒu', 'to have / there is', 'The negative is 没有 méi yǒu, not 不有.'),
+    W('要', 'yào', 'to want'),
+    W('喜欢', 'xǐ huan', 'to like'),
+    W('去', 'qù', 'to go'),
+    W('来', 'lái', 'to come'),
+    W('看', 'kàn', 'to look / watch / read'),
+    W('说', 'shuō', 'to speak / say'),
+    W('不', 'bù', 'not'),
+  ]},
+  { id: 'qs', zh: '问题', title: 'Questions', intro: 'Add <span class="han">吗</span> to the end of any sentence to make a yes/no question. Question words go where the answer would go: <span class="han">你是谁？</span> is literally "you are who?"', words: [
+    W('什么', 'shén me', 'what'),
+    W('谁', 'shéi', 'who'),
+    W('哪里', 'nǎ lǐ', 'where', 'Said "ná lǐ" because of the 3rd-tone rule.'),
+    W('几', 'jǐ', 'how many (small numbers)'),
+    W('多少', 'duō shao', 'how many / how much'),
+    W('为什么', 'wèi shén me', 'why'),
+    W('怎么', 'zěn me', 'how'),
+  ]},
+  { id: 'time', zh: '时间', title: 'Time', intro: 'Time words come early in the sentence, before the verb: <span class="han">我明天去</span> is "I tomorrow go".', words: [
+    W('今天', 'jīn tiān', 'today'),
+    W('明天', 'míng tiān', 'tomorrow'),
+    W('昨天', 'zuó tiān', 'yesterday'),
+    W('现在', 'xiàn zài', 'now'),
+    W('年', 'nián', 'year'),
+    W('月', 'yuè', 'month / moon'),
+    W('星期', 'xīng qī', 'week'),
+    W('点', 'diǎn', "o'clock"),
+  ]},
+  { id: 'sent', zh: '句子', title: 'First sentences', intro: 'Now put it together. Play each sentence, then say it out loud along with the audio. Use the slow button as often as you like.', words: [
+    W('我是学生。', 'wǒ shì xué sheng.', 'I am a student.'),
+    W('你叫什么名字？', 'nǐ jiào shén me míng zi?', "What's your name?", 'Literally "you are called what name?"'),
+    W('我叫…', 'wǒ jiào …', 'My name is…', 'Add your name at the end.'),
+    W('我喜欢喝茶。', 'wǒ xǐ huan hē chá.', 'I like to drink tea.'),
+    W('这个多少钱？', 'zhè ge duō shao qián?', 'How much is this?'),
+    W('我听不懂。', 'wǒ tīng bu dǒng.', "I don't understand.", 'Literally "I listen but don\'t understand".'),
+    W('请再说一遍。', 'qǐng zài shuō yí biàn.', 'Please say it again.'),
+    W('你会说中文吗？', 'nǐ huì shuō zhōng wén ma?', 'Do you speak Chinese?'),
+  ]},
+];
+const ALL = UNITS.flatMap(u => u.words.map(w => Object.assign(w, { unit: u.id })));
+const BY_H = Object.fromEntries(ALL.map(w => [w.h, w]));
+
+const TONE_SET = [
+  ['妈','mā','mom'],['麻','má','numb'],['马','mǎ','horse'],['骂','mà','to scold'],
+  ['八','bā','eight'],['拔','bá','to pull out'],['把','bǎ','to hold'],['爸','bà','dad'],
+  ['衣','yī','clothes'],['姨','yí','aunt'],['椅','yǐ','chair'],['亿','yì','100 million'],
+  ['书','shū','book'],['鼠','shǔ','mouse'],['树','shù','tree'],
+  ['汤','tāng','soup'],['糖','táng','sugar'],['躺','tǎng','to lie down'],['烫','tàng','burning hot'],
+  ['飞','fēi','to fly'],['肥','féi','fat'],['费','fèi','fee'],
+  ['通','tōng','to go through'],['同','tóng','same'],['桶','tǒng','bucket'],['痛','tòng','pain'],
+  ['天','tiān','sky'],['田','tián','field'],['山','shān','mountain'],['水','shuǐ','water'],['看','kàn','to look'],
+  ['来','lái','to come'],['我','wǒ','I'],['去','qù','to go'],['茶','chá','tea'],['五','wǔ','five'],
+];
+const TONE_INFO = {
+  1: { name: 'high flat', chao: '55', pts: [[8,8],[92,8]] },
+  2: { name: 'rising', chao: '35', pts: [[8,38],[92,8]] },
+  3: { name: 'dip', chao: '214', pts: [[8,53],[40,68],[92,23]] },
+  4: { name: 'falling', chao: '51', pts: [[8,8],[92,68]] },
+};
+
+// ---------- helpers ----------
+const MARKS = { 1: 'āēīōūǖĀĒĪŌŪǕ', 2: 'áéíóúǘÁÉÍÓÚǗ', 3: 'ǎěǐǒǔǚǍĚǏǑǓǙ', 4: 'àèìòùǜÀÈÌÒÙǛ' };
+function toneOf(s) { for (const t of [1, 2, 3, 4]) for (const c of MARKS[t]) if (s.includes(c)) return t; return 5; }
+const isHan = c => /\p{Script=Han}/u.test(c);
+const sylls = p => p.split(/\s+/).filter(s => /\p{L}/u.test(s));
+const stripTones = s => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+function colorPy(p) { return p.split(/(\s+)/).map(s => /\p{L}/u.test(s) ? `<span class="t${toneOf(s)}">${s}</span>` : s).join(''); }
+function colorHan(h, p) {
+  const sy = sylls(p); let i = 0;
+  return [...h].map(c => isHan(c) ? `<span class="t${sy[i] ? toneOf(sy[i++]) : 5}">${c}</span>` : c).join('');
+}
+const shuffle = a => { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+const pick = a => a[Math.floor(Math.random() * a.length)];
+const DAY = 864e5;
+function contourSvg(t, w = 100, h = 76) {
+  const pts = TONE_INFO[t].pts.map(p => p.join(',')).join(' ');
+  return `<svg viewBox="0 0 100 76" width="${w}" height="${h}" aria-hidden="true"><polyline points="${pts}" fill="none" stroke="var(--t${t})" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+}
+const ICON_SPEAK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H2v6h4l5 4V5z" fill="currentColor"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M19 5a10 10 0 0 1 0 14"/></svg>';
+const ICON_SLOW = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2 2"/><path d="M9 2h6"/></svg>';
+
+// ---------- storage (per-device progress) ----------
+const store = {
+  get(k, d) { try { const v = localStorage.getItem('hzs:' + k); return v ? JSON.parse(v) : d; } catch { return d; } },
+  set(k, v) { try { localStorage.setItem('hzs:' + k, JSON.stringify(v)); } catch {} },
+};
+let progress = store.get('progress', {});   // unit id -> best score (0..1)
+let deck = store.get('deck', {});           // hanzi -> { box 1..5, due ms }
+let streak = store.get('streak', { days: 0, last: null });
+const INTERVALS = [0, DAY, 3 * DAY, 7 * DAY, 16 * DAY, 35 * DAY];
+const dayKey = d => d.toISOString().slice(0, 10);
+function markActivity() {
+  const today = dayKey(new Date()), yest = dayKey(new Date(Date.now() - DAY));
+  if (streak.last === today) return;
+  streak = { days: streak.last === yest ? streak.days + 1 : 1, last: today };
+  store.set('streak', streak);
+}
+function currentStreak() {
+  const today = dayKey(new Date()), yest = dayKey(new Date(Date.now() - DAY));
+  return (streak.last === today || streak.last === yest) ? streak.days : 0;
+}
+
+// ---------- speech ----------
+let zhVoice = null;
+const hasTTS = 'speechSynthesis' in window;
+function loadVoices() {
+  if (!hasTTS) return;
+  const vs = speechSynthesis.getVoices();
+  const before = !!zhVoice;
+  zhVoice = vs.find(v => /^zh[-_]CN/i.test(v.lang)) || vs.find(v => /^(zh|cmn)/i.test(v.lang)) || null;
+  renderVoiceNote();
+  if (before !== !!zhVoice && (view === 'tones' || view === 'path')) render();
+}
+function speak(text, slow) {
+  if (!hasTTS) return;
+  try {
+    speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text.replace(/…/g, ''));
+    u.lang = 'zh-CN'; if (zhVoice) u.voice = zhVoice;
+    u.rate = slow ? 0.5 : 0.8;
+    speechSynthesis.speak(u);
+  } catch {}
+}
+const canListen = () => hasTTS && !!zhVoice;
+function speakBtns(h, big) {
+  if (!hasTTS) return '';
+  return `<button class="speak ${big ? 'lg' : ''}" data-act="say" data-text="${h}" aria-label="Play audio">${ICON_SPEAK}</button>
+          <button class="speak" data-act="say" data-slow="1" data-text="${h}" aria-label="Play slowly" title="Slow">${ICON_SLOW}</button>`;
+}
+
+// ---------- app state ----------
+let view = 'path';
+let L = null;      // active lesson
+let T = { item: null, answered: null, right: 0, total: 0, run: 0 };
+let R = { dir: 'zh', card: null, shown: false, all: false };
+let query = '';
+const $main = document.getElementById('main');
+
+function nextUnitIndex() { const i = UNITS.findIndex(u => !(progress[u.id] >= 0.6)); return i < 0 ? 0 : i; }
+function starsFor(s) { return s == null ? 0 : s >= 1 ? 3 : s >= 0.8 ? 2 : s >= 0.6 ? 1 : 0; }
+function starHtml(n) { return '<span class="stars" aria-label="' + n + ' of 3 stars">' + [0, 1, 2].map(i => i < n ? '★' : '<span class="off">★</span>').join('') + '</span>'; }
+function dueCards() { const now = Date.now(); return Object.entries(deck).filter(([h, c]) => c.due <= now && BY_H[h]).map(([h]) => h); }
+
+function renderStats() {
+  const done = UNITS.filter(u => progress[u.id] >= 0.6).length;
+  document.getElementById('stats').innerHTML =
+    `<span class="chip"><b>${currentStreak()}</b> day streak</span>
+     <span class="chip"><b>${Object.keys(deck).length}</b> words</span>
+     <span class="chip"><b>${done}/${UNITS.length}</b> lessons</span>`;
+  document.querySelectorAll('#tabs button').forEach(b => {
+    const on = b.dataset.tab === view || (view === 'lesson' && b.dataset.tab === 'path');
+    on ? b.setAttribute('aria-current', 'page') : b.removeAttribute('aria-current');
+    if (b.dataset.tab === 'review') { const d = dueCards().length; b.textContent = d ? `Review (${d})` : 'Review'; }
+  });
+}
+function renderVoiceNote() {
+  const el = document.getElementById('voice-note');
+  if (!hasTTS) el.textContent = 'This browser cannot play speech, so audio buttons and listening drills are hidden. Chrome, Edge and Safari support it.';
+  else if (!zhVoice) el.innerHTML = 'No Chinese voice was found on this device, so listening questions are turned off. Add one and reload: on Windows, Settings → Time &amp; language → Speech → Add voices → Chinese. On iPhone, Settings → Accessibility → Spoken Content → Voices → Chinese. On Android, install Google Text-to-speech with Chinese.';
+  else el.textContent = `Audio: ${zhVoice.name}. Progress is saved in this browser.`;
+}
+
+function render() {
+  renderStats();
+  if (view === 'path') renderPath();
+  else if (view === 'lesson') renderLesson();
+  else if (view === 'tones') renderTones();
+  else if (view === 'review') renderReview();
+  else if (view === 'words') renderWords();
+}
+
+// ---------- lessons path ----------
+function renderPath() {
+  const ni = nextUnitIndex(), nu = UNITS[ni], started = Object.keys(progress).length > 0;
+  $main.innerHTML = `
+    <div class="wrap" style="gap:28px">
+      <section class="hero-next">
+        <div class="bigzh" aria-hidden="true">${nu.zh}</div>
+        <div class="txt">
+          <span class="eyebrow">${started ? 'Up next' : 'Start here'} · Lesson ${ni + 1}</span>
+          <h2>${nu.title}</h2>
+          <p style="color:var(--muted)">${nu.words.length} ${nu.id === 'sent' ? 'sentences' : 'words'}, then a short quiz. About 5 minutes.</p>
+        </div>
+        <button class="btn primary big" data-act="start" data-unit="${ni}">${started ? 'Continue' : 'Start lesson 1'}</button>
+      </section>
+      <ol class="path">
+        ${UNITS.map((u, i) => {
+          const s = progress[u.id], done = s >= 0.6;
+          return `<li class="unit ${done ? 'done' : ''} ${i === ni ? 'next' : ''}">
+            <span class="num">${done ? '✓' : i + 1}</span>
+            <div class="info">
+              <div class="t"><span class="zh">${u.zh}</span><span class="en">${u.title}</span></div>
+              <span class="meta">${u.words.slice(0, 4).map(w => w.h.replace(/[。？]/g, '')).join(' · ')}${u.words.length > 4 ? ' …' : ''} ${s != null ? ' ' + starHtml(starsFor(s)) : ''}</span>
+            </div>
+            <button class="btn" data-act="start" data-unit="${i}">${done ? 'Redo' : s != null ? 'Retry' : 'Start'}</button>
+          </li>`;
+        }).join('')}
+      </ol>
+    </div>`;
+}
+
+// ---------- lesson flow ----------
+function startLesson(i) {
+  const unit = UNITS[i];
+  L = { unit, phase: 'intro', i: 0, qs: [], qi: 0, answered: null, firstRight: 0, n: 0 };
+  view = 'lesson'; render(); window.scrollTo(0, 0);
+}
+function makeQ(type, w, unit) {
+  if (type === 'tone' || type === 'toneRead') return { type, w, opts: [1, 2, 3, 4], ans: toneOf(w.p) };
+  const poolSrc = unit.words.length >= 4 ? unit.words : ALL;
+  let pool = poolSrc.filter(x => x !== w && x.e !== w.e && stripTones(x.p) !== stripTones(w.p));
+  shuffle(pool);
+  let opts = pool.slice(0, 3);
+  if (opts.length < 3) opts = opts.concat(shuffle(ALL.filter(x => x !== w && !opts.includes(x) && stripTones(x.p) !== stripTones(w.p))).slice(0, 3 - opts.length));
+  opts = shuffle(opts.concat([w]));
+  return { type, w, opts, ans: w };
+}
+function buildQuiz(unit) {
+  const words = unit.words, n = Math.min(8, Math.max(6, words.length));
+  const pool = shuffle(words.slice()), qs = [];
+  for (let k = 0; k < n; k++) {
+    const w = pool[k % pool.length];
+    let types = ['h2e', 'e2h'];
+    if (canListen()) types.push('listen', 'listen');
+    if (unit.id === 'tones') types = toneOf(w.p) === 5 ? ['h2e', 'e2h'] : (canListen() ? ['tone', 'tone', 'h2e'] : ['toneRead', 'h2e']);
+    qs.push(makeQ(pick(types), w, unit));
+  }
+  return qs;
+}
+function renderLesson() {
+  const { unit } = L, nw = unit.words.length;
+  const total = nw + (L.n || 8) + 1;
+  const done = L.phase === 'intro' ? 0 : L.phase === 'learn' ? 1 + L.i : L.phase === 'quiz' ? 1 + nw + Math.min(L.qi, L.n) : total;
+  const bar = `<div class="lessonbar">
+      <button class="btn ghost" data-act="quit" aria-label="Leave lesson">✕ Leave</button>
+      <div class="progress" role="progressbar" aria-valuemin="0" aria-valuemax="${total}" aria-valuenow="${done}"><i style="width:${(done / total * 100).toFixed(1)}%"></i></div>
+    </div>`;
+  let body = '';
+  if (L.phase === 'intro') body = introHtml(unit);
+  else if (L.phase === 'learn') body = learnHtml(unit.words[L.i], L.i, nw);
+  else if (L.phase === 'quiz') body = quizHtml(L.qs[L.qi]);
+  else body = doneHtml();
+  $main.innerHTML = `<div class="wrap" style="gap:18px">${bar}${body}</div>`;
+}
+function toneChartHtml() {
+  const rows = [5, 4, 3, 2, 1], y = l => 8 + (5 - l) * 15;
+  const lines = [1, 2, 3, 4].map(t => {
+    const off = (t - 1) * 110 + 28;
+    const pts = TONE_INFO[t].pts.map(([x, yy]) => `${off + x * 0.82},${yy}`).join(' ');
+    return `<polyline points="${pts}" fill="none" stroke="var(--t${t})" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+      <text x="${off + 41}" y="88" text-anchor="middle">Tone ${t} · ${TONE_INFO[t].chao}</text>`;
+  }).join('');
+  return `<div style="overflow-x:auto"><svg class="chart" viewBox="0 0 470 96" role="img" aria-label="Pitch contours of the four tones on a 1 to 5 scale">
+    ${rows.map(l => `<line class="grid" x1="20" x2="466" y1="${y(l)}" y2="${y(l)}"/><text x="4" y="${y(l) + 3}">${l}</text>`).join('')}
+    ${lines}</svg></div>`;
+}
+function introHtml(unit) {
+  if (unit.intro === 'tones') {
+    return `<section class="card intro">
+      <span class="eyebrow">Lesson 1 · before you start</span>
+      <h2>Pitch changes the meaning</h2>
+      <p>Every Chinese syllable has a tone, a pitch shape your voice follows. Say <b>ma</b> four ways and you get four different words. The chart shows each shape on the 1–5 pitch scale used for Chinese, where 5 is the top of your voice.</p>
+      ${toneChartHtml()}
+      <p>Tap each one and copy it out loud. Colours stay the same across the whole app: <span class="t1">red 1</span>, <span class="t2">amber 2</span>, <span class="t3">green 3</span>, <span class="t4">blue 4</span>, <span class="t5">grey for neutral</span>.</p>
+      <div class="tonegrid">${unit.words.slice(0, 4).map((w, i) => `
+        <button class="tonecell" data-act="say" data-text="${w.h}">
+          ${contourSvg(i + 1, 56, 34)}<span class="oh t${i + 1}">${w.h}</span><span class="op t${i + 1}">${w.p}</span><small>${w.e}</small>
+        </button>`).join('')}</div>
+      <div class="row"><span class="spacer"></span><button class="btn primary big" data-act="begin">Learn the words</button></div>
+    </section>`;
+  }
+  return `<section class="card intro">
+    <span class="eyebrow">Lesson ${UNITS.indexOf(unit) + 1} · ${unit.zh}</span>
+    <h2>${unit.title}</h2>
+    <p>${unit.intro}</p>
+    <div class="row"><span class="spacer"></span><button class="btn primary big" data-act="begin">Learn the ${unit.id === 'sent' ? 'sentences' : 'words'}</button></div>
+  </section>`;
+}
+function learnHtml(w, i, n) {
+  const sentence = [...w.h].filter(isHan).length > 3;
+  return `<section class="card pop">
+    <span class="eyebrow">New ${sentence ? 'sentence' : 'word'} ${i + 1} of ${n}</span>
+    <div class="word">
+      <div class="hz ${sentence ? 'sentence' : ''}" lang="zh-CN">${colorHan(w.h, w.p)}</div>
+      <div class="py">${colorPy(w.p)}</div>
+      <div class="en">${w.e}</div>
+      <div class="row" style="justify-content:center">${speakBtns(w.h, true)}</div>
+    </div>
+    ${w.n ? `<div class="note">${w.n.replace(/(\p{Script=Han}+)/gu, '<span class="han">$1</span>')}</div>` : ''}
+    <div class="row">
+      <button class="btn" data-act="prev" ${i === 0 ? 'disabled' : ''}>Back</button>
+      <span class="spacer"></span>
+      <button class="btn primary big" data-act="next">${i === n - 1 ? 'Start quiz' : 'Next'}</button>
+    </div>
+  </section>`;
+}
+function optHtml(q, o, k) {
+  let inner;
+  if (q.type === 'tone' || q.type === 'toneRead') inner = `${contourSvg(o, 56, 34)}<span class="op" style="color:var(--ink);font-weight:600">Tone ${o}</span><span class="op">${TONE_INFO[o].name}</span>`;
+  else if (q.type === 'h2e') inner = `<span style="font-weight:500">${o.e}</span>`;
+  else inner = `<span class="oh" lang="zh-CN">${o.h}</span><span class="op">${o.p}</span>`;
+  let cls = '';
+  if (q.picked != null) { if (o === q.ans) cls = 'right'; else if (o === q.picked) cls = 'wrong'; }
+  return `<button class="opt ${cls}" data-act="answer" data-i="${k}" ${q.picked != null ? 'disabled' : ''}><span class="k">${k + 1}</span>${inner}</button>`;
+}
+function promptHtml(q) {
+  const w = q.w;
+  switch (q.type) {
+    case 'h2e': return `<span class="ask">What does this mean?</span>
+      <div class="hz han" style="font-size:clamp(2.6rem,10vw,4rem);line-height:1.15" lang="zh-CN">${colorHan(w.h, w.p)}</div>
+      <div class="row" style="justify-content:center"><span style="font-size:1.2rem">${colorPy(w.p)}</span>${hasTTS ? `<button class="speak" data-act="say" data-text="${w.h}" aria-label="Play audio">${ICON_SPEAK}</button>` : ''}</div>`;
+    case 'e2h': return `<span class="ask">How do you say this in Chinese?</span><div class="q-en">${w.e}</div>`;
+    case 'listen': return `<span class="ask">Listen. Which one did you hear?</span>
+      <div class="row" style="justify-content:center">${speakBtns(w.h, true)}</div>`;
+    case 'tone': return `<span class="ask">Which tone do you hear?</span>
+      <div class="row" style="justify-content:center">${speakBtns(w.h, true)}</div>
+      ${q.picked != null ? `<div class="han" style="font-size:2.4rem">${colorHan(w.h, w.p)} <span style="font-family:var(--f-body);font-size:1.3rem">${colorPy(w.p)}</span></div>` : ''}`;
+    case 'toneRead': return `<span class="ask">Which tone is marked here?</span><div class="q-en" style="font-size:3rem">${w.p}</div>`;
+  }
+}
+function quizHtml(q) {
+  const tones = q.type === 'tone' || q.type === 'toneRead';
+  let fb = '';
+  if (q.picked != null) {
+    const ok = q.picked === q.ans, w = q.w;
+    fb = `<div class="feedback ${ok ? 'ok' : 'no'}" role="status">
+      <div class="msg"><b>${ok ? pick(['Correct!', 'Nice!', 'Right!', '对! Correct.']) : 'Not quite.'}</b>
+        <span><span class="han">${w.h}</span> ${w.p} = ${w.e}${!ok && tones ? ` (tone ${q.ans})` : ''}</span></div>
+      <button class="btn primary" data-act="continue" autofocus>Continue</button>
+    </div>`;
+  }
+  return `<section class="card pop">
+    <span class="eyebrow">Quiz · question ${Math.min(L.qi + 1, L.n)} of ${L.n}${q.retry ? ' · second try' : ''}</span>
+    <div class="prompt">${promptHtml(q)}</div>
+    <div class="options ${tones ? 'tones' : ''}">${q.opts.map((o, k) => optHtml(q, o, k)).join('')}</div>
+    ${fb}
+  </section>`;
+}
+function doneHtml() {
+  const s = L.firstRight / L.n, st = starsFor(s), pass = s >= 0.6;
+  const ni = UNITS.indexOf(L.unit) + 1;
+  return `<section class="card score pop">
+    <span class="eyebrow">Lesson ${ni} complete</span>
+    <div class="pct">${Math.round(s * 100)}%</div>
+    ${starHtml(st)}
+    <p style="max-width:44ch">${pass
+      ? `You got ${L.firstRight} of ${L.n} right on the first try. These ${L.unit.words.length} words are now in your review deck.`
+      : `You got ${L.firstRight} of ${L.n} on the first try. Score 60% or more to finish the lesson. Go through the words once more and try again.`}</p>
+    <div class="row" style="justify-content:center">
+      <button class="btn" data-act="start" data-unit="${ni - 1}">Do it again</button>
+      ${pass && ni < UNITS.length ? `<button class="btn primary big" data-act="start" data-unit="${ni}">Next: ${UNITS[ni].title}</button>` : `<button class="btn primary big" data-act="tab" data-tab="path">Back to lessons</button>`}
+    </div>
+  </section>`;
+}
+function answer(k) {
+  const q = L.qs[L.qi];
+  if (q.picked != null) return;
+  q.picked = q.opts[k];
+  const ok = q.picked === q.ans;
+  if (!q.retry && ok) L.firstRight++;
+  if (!ok && !q.retry) L.qs.push(Object.assign(makeQ(q.type, q.w, L.unit), { retry: true }));
+  if (q.type === 'h2e' || q.type === 'e2h') speak(q.w.h);
+  renderLesson();
+}
+function cont() {
+  L.qi++;
+  if (L.qi >= L.qs.length) finishLesson();
+  renderLesson();
+  autoPlay();
+}
+function autoPlay() {
+  if (view !== 'lesson' || L.phase !== 'quiz') return;
+  const q = L.qs[L.qi];
+  if (q && (q.type === 'listen' || q.type === 'tone')) setTimeout(() => speak(q.w.h), 250);
+}
+function finishLesson() {
+  L.phase = 'done';
+  const s = L.firstRight / L.n;
+  progress[L.unit.id] = Math.max(progress[L.unit.id] ?? 0, s);
+  store.set('progress', progress);
+  if (s >= 0.6) {
+    const now = Date.now();
+    L.unit.words.forEach(w => { if (!deck[w.h]) deck[w.h] = { box: 1, due: now }; });
+    store.set('deck', deck);
+  }
+  markActivity();
+  renderStats();
+}
+
+// ---------- tone trainer ----------
+function newToneItem() {
+  let it; do { it = pick(TONE_SET); } while (T.item && it[0] === T.item[0]);
+  T.item = it; T.answered = null;
+}
+function renderTones() {
+  if (!T.item) newToneItem();
+  const [h, p, e] = T.item, t = toneOf(p), listen = canListen();
+  const acc = T.total ? Math.round(T.right / T.total * 100) : null;
+  $main.innerHTML = `<div class="wrap" style="gap:18px">
+    <div class="row">
+      <div><h2>Tone trainer</h2><p style="color:var(--muted)">${listen ? 'Hear a syllable, pick its tone. This is the skill that makes you understood.' : 'Reading mode: no Chinese voice on this device, so you will identify tone marks instead.'}</p></div>
+      <span class="spacer"></span>
+      <div class="stats"><span class="chip"><b>${T.run}</b> in a row</span><span class="chip"><b>${acc == null ? '–' : acc + '%'}</b> of ${T.total}</span></div>
+    </div>
+    <section class="card pop">
+      <div class="prompt">
+        ${listen ? `<span class="ask">Which tone is this?</span><div class="row" style="justify-content:center">${speakBtns(h, true)}</div>`
+                 : `<span class="ask">Which tone is marked?</span><div class="q-en" style="font-size:3rem">${p}</div>`}
+        ${T.answered != null ? `<div class="row" style="justify-content:center;gap:14px"><span class="han t${t}" style="font-size:2.6rem">${h}</span><span class="t${t}" style="font-size:1.4rem;font-weight:600">${p}</span><span style="color:var(--muted)">${e}</span></div>` : ''}
+      </div>
+      <div class="options tones" style="grid-template-columns:repeat(auto-fit,minmax(130px,1fr))">
+        ${[1, 2, 3, 4].map(o => {
+          let cls = ''; if (T.answered != null) { if (o === t) cls = 'right'; else if (o === T.answered) cls = 'wrong'; }
+          return `<button class="opt ${cls}" data-act="tone" data-t="${o}" ${T.answered != null ? 'disabled' : ''}><span class="k">${o}</span>${contourSvg(o, 56, 34)}<span class="op" style="color:var(--ink);font-weight:600">Tone ${o}</span><span class="op">${TONE_INFO[o].name}</span></button>`;
+        }).join('')}
+      </div>
+      ${T.answered != null ? `<div class="feedback ${T.answered === t ? 'ok' : 'no'}" role="status"><div class="msg"><b>${T.answered === t ? 'Correct!' : `That was tone ${t}, ${TONE_INFO[t].name}.`}</b>${listen && T.answered !== t ? '<span>Play it again and listen for the shape.</span>' : ''}</div><button class="btn primary" data-act="tonenext" autofocus>Next</button></div>` : ''}
+    </section>
+    <section class="card intro">
+      <h3>Cheat sheet</h3>
+      ${toneChartHtml()}
+      <p style="color:var(--muted);font-size:.93rem">Tone 1 stays high. Tone 2 climbs like a question. Tone 3 dips to the bottom of your voice (in fast speech it often stays low). Tone 4 drops hard. Hum the shape before you say the word.</p>
+    </section>
+  </div>`;
+}
+function answerTone(o) {
+  if (T.answered != null) return;
+  T.answered = o; T.total++;
+  if (o === toneOf(T.item[1])) { T.right++; T.run++; } else T.run = 0;
+  if (T.total === 1) markActivity();
+  render();
+}
+
+// ---------- review (spaced repetition) ----------
+function nextReviewCard() {
+  const due = R.all ? Object.keys(deck).filter(h => BY_H[h]) : dueCards();
+  R.card = due.length ? pick(due.filter(h => h !== R.card).length ? due.filter(h => h !== R.card) : due) : null;
+  R.shown = false;
+}
+function renderReview() {
+  const total = Object.keys(deck).length;
+  if (!total) {
+    $main.innerHTML = `<section class="card"><div class="empty">
+      <div class="han" style="font-size:3rem;color:var(--accent)">复习</div>
+      <h3 style="color:var(--ink)">Your review deck is empty</h3>
+      <p style="max-width:42ch">Finish a lesson and its words land here. You will see each one again just before you'd forget it: after 1 day, 3 days, a week, and so on.</p>
+      <button class="btn primary big" data-act="start" data-unit="${nextUnitIndex()}">Start lesson ${nextUnitIndex() + 1}</button>
+    </div></section>`;
+    return;
+  }
+  if (!R.card || !deck[R.card] || (!R.all && deck[R.card].due > Date.now())) nextReviewCard();
+  const boxes = [1, 2, 3, 4, 5].map(b => Object.values(deck).filter(c => c.box === b).length);
+  const labels = ['New', '1 day', '3 days', '1 week', 'Mastered'];
+  const boxRow = `<div class="boxes">${boxes.map((n, i) => `<div class="box"><b>${n}</b><small>${labels[i]}</small></div>`).join('')}</div>`;
+  const head = `<div class="row"><div><h2>Review</h2><p style="color:var(--muted)">${dueCards().length} due now · ${total} words in your deck</p></div><span class="spacer"></span>
+    <div class="seg" role="group" aria-label="Card direction">
+      <button data-act="dir" data-dir="zh" aria-pressed="${R.dir === 'zh'}">Chinese → English</button>
+      <button data-act="dir" data-dir="en" aria-pressed="${R.dir === 'en'}">English → Chinese</button>
+    </div></div>`;
+  if (!R.card) {
+    const nextDue = Math.min(...Object.values(deck).map(c => c.due));
+    const hrs = Math.max(1, Math.round((nextDue - Date.now()) / 36e5));
+    $main.innerHTML = `<div class="wrap" style="gap:18px">${head}<section class="card"><div class="empty">
+      <h3 style="color:var(--ink)">All caught up</h3>
+      <p>The next card is due in about ${hrs < 24 ? hrs + ' hour' + (hrs > 1 ? 's' : '') : Math.round(hrs / 24) + ' day' + (hrs >= 48 ? 's' : '')}. You can still practice the whole deck now; it won't change your schedule.</p>
+      <div class="row" style="justify-content:center"><button class="btn primary" data-act="practiceall">Practice all ${total}</button><button class="btn" data-act="start" data-unit="${nextUnitIndex()}">Next lesson</button></div>
+    </div></section>${boxRow}</div>`;
+    return;
+  }
+  const w = BY_H[R.card], sentence = [...w.h].filter(isHan).length > 3;
+  const front = R.dir === 'zh'
+    ? `<div class="hz ${sentence ? 'sentence' : ''}" lang="zh-CN">${R.shown ? colorHan(w.h, w.p) : w.h}</div>`
+    : `<div class="q-en" style="font-family:var(--f-display);font-size:2rem;font-weight:700">${w.e}</div>`;
+  const back = R.dir === 'zh'
+    ? `<div class="py">${colorPy(w.p)}</div><div class="en">${w.e}</div>`
+    : `<div class="hz ${sentence ? 'sentence' : ''}" lang="zh-CN">${colorHan(w.h, w.p)}</div><div class="py">${colorPy(w.p)}</div>`;
+  $main.innerHTML = `<div class="wrap" style="gap:18px">${head}
+    <section class="card ${R.shown ? '' : 'flash'} pop" ${R.shown ? '' : 'data-act="reveal" tabindex="0" role="button" aria-label="Show answer"'}>
+      ${R.all ? '<span class="eyebrow">Practice mode · schedule unchanged</span>' : `<span class="eyebrow">Box ${deck[R.card].box} of 5</span>`}
+      <div class="word">${front}${R.shown ? back + `<div class="row" style="justify-content:center">${speakBtns(w.h)}</div>` : '<span style="color:var(--muted)">Say it in your head, then tap to check</span>'}</div>
+      ${R.shown ? `<div class="row">
+        <button class="btn big" data-act="grade" data-g="0" style="flex:1">Forgot <small style="color:var(--muted)">(1)</small></button>
+        <button class="btn primary big" data-act="grade" data-g="1" style="flex:1">Remembered <small>(2)</small></button></div>` : ''}
+    </section>
+    ${R.all ? '<div class="row"><button class="btn ghost" data-act="stopall">Stop practicing</button></div>' : ''}
+    ${boxRow}</div>`;
+}
+function grade(g) {
+  const c = deck[R.card];
+  if (!R.all) {
+    if (g) { const was = c.box; c.box = Math.min(5, was + 1); c.due = Date.now() + (was === 5 ? INTERVALS[5] : INTERVALS[c.box - 1]); }
+    else { c.box = 1; c.due = Date.now() + 10 * 60e3; }
+    store.set('deck', deck);
+    markActivity();
+  }
+  nextReviewCard();
+  render();
+}
+
+// ---------- words ----------
+function wordListHtml() {
+  const q = stripTones(query.trim());
+  const groups = UNITS.map(u => {
+    const ws = u.words.filter(w => !q || w.h.includes(query.trim()) || stripTones(w.p).replace(/\s/g, '').includes(q.replace(/\s/g, '')) || w.e.toLowerCase().includes(q));
+    return ws.length ? `<section class="group"><h3>${u.title} <span class="han">${u.zh}</span></h3><ul class="wl">${ws.map(w => `
+      <li><span class="h" lang="zh-CN">${colorHan(w.h, w.p)}</span><span class="m"><span>${colorPy(w.p)}</span><span>${w.e}</span></span>
+      ${hasTTS ? `<button class="speak" data-act="say" data-text="${w.h}" aria-label="Play ${w.e}">${ICON_SPEAK}</button>` : '<span></span>'}</li>`).join('')}</ul></section>` : '';
+  }).join('');
+  return groups || `<div class="empty">No words match "${query.replace(/[<>&"]/g, '')}". Try English, pinyin without tone marks (ni hao), or characters.</div>`;
+}
+function renderWords() {
+  $main.innerHTML = `<div class="wrap" style="gap:18px">
+    <div><h2>Word list</h2><p style="color:var(--muted)">All ${ALL.length} words and sentences from the course. Tap the speaker to hear one.</p></div>
+    <input class="search" id="q" type="search" placeholder="Search: hello, ni hao, 你好" value="${query.replace(/"/g, '&quot;')}" aria-label="Search words">
+    <div class="wordlist" id="wl">${wordListHtml()}</div>
+  </div>`;
+  document.getElementById('q').addEventListener('input', e => { query = e.target.value; document.getElementById('wl').innerHTML = wordListHtml(); });
+}
+
+// ---------- events ----------
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-act]'); if (!b) return;
+  const d = b.dataset;
+  switch (d.act) {
+    case 'tab': view = d.tab; if (view === 'review') R.all = false; try { history.replaceState(null, '', '#' + view); } catch {} render(); window.scrollTo(0, 0); break;
+    case 'say': e.stopPropagation(); speak(d.text, !!d.slow); break;
+    case 'start': startLesson(+d.unit); break;
+    case 'quit': view = 'path'; L = null; render(); break;
+    case 'begin': L.phase = 'learn'; L.i = 0; renderLesson(); speak(L.unit.words[0].h); break;
+    case 'prev': if (L.i > 0) { L.i--; renderLesson(); } break;
+    case 'next':
+      if (L.i < L.unit.words.length - 1) { L.i++; renderLesson(); speak(L.unit.words[L.i].h); }
+      else { L.qs = buildQuiz(L.unit); L.n = L.qs.length; L.qi = 0; L.phase = 'quiz'; renderLesson(); autoPlay(); }
+      break;
+    case 'answer': answer(+d.i); break;
+    case 'continue': cont(); break;
+    case 'tone': answerTone(+d.t); break;
+    case 'tonenext': newToneItem(); render(); if (canListen()) setTimeout(() => speak(T.item[0]), 200); break;
+    case 'reveal': R.shown = true; renderReview(); speak(BY_H[R.card].h); break;
+    case 'grade': grade(+d.g); break;
+    case 'dir': R.dir = d.dir; R.shown = false; renderReview(); break;
+    case 'practiceall': R.all = true; nextReviewCard(); renderReview(); break;
+    case 'stopall': R.all = false; R.card = null; renderReview(); break;
+  }
+});
+document.addEventListener('keydown', e => {
+  if (e.target.matches('input, textarea') || e.metaKey || e.ctrlKey || e.altKey) return;
+  const k = e.key;
+  if (view === 'lesson' && L) {
+    if (L.phase === 'quiz') {
+      const q = L.qs[L.qi];
+      if (q.picked == null && /^[1-4]$/.test(k) && q.opts[+k - 1] != null) { e.preventDefault(); answer(+k - 1); }
+      else if (q.picked != null && k === 'Enter') { e.preventDefault(); cont(); }
+    } else if (L.phase === 'learn' && (k === 'Enter' || k === 'ArrowRight')) { e.preventDefault(); document.querySelector('[data-act="next"]')?.click(); }
+    else if (L.phase === 'learn' && k === 'ArrowLeft') { document.querySelector('[data-act="prev"]')?.click(); }
+    else if (L.phase === 'intro' && k === 'Enter') { e.preventDefault(); document.querySelector('[data-act="begin"]')?.click(); }
+  } else if (view === 'tones') {
+    if (T.answered == null && /^[1-4]$/.test(k)) answerTone(+k);
+    else if (T.answered != null && k === 'Enter') { e.preventDefault(); document.querySelector('[data-act="tonenext"]')?.click(); }
+  } else if (view === 'review' && R.card) {
+    if (!R.shown && (k === ' ' || k === 'Enter')) { e.preventDefault(); document.querySelector('[data-act="reveal"]')?.click(); }
+    else if (R.shown && (k === '1' || k === '2')) grade(k === '2' ? 1 : 0);
+  }
+});
+
+// ---------- boot ----------
+if (hasTTS) { loadVoices(); speechSynthesis.addEventListener?.('voiceschanged', loadVoices); }
+renderVoiceNote();
+const h0 = (location.hash || '').slice(1);
+if (['path', 'tones', 'review', 'words'].includes(h0)) view = h0;
+render();
+</script>
+</body></html>
